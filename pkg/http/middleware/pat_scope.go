@@ -17,7 +17,7 @@ func WithPATScopes(logger *slog.Logger, scopeFetcher scopes.FetcherInterface) fu
 
 			tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
 			if !ok || tokenInfo == nil {
-				logger.Warn("no token info found in context")
+				logger.Debug("no token info found in context")
 				next.ServeHTTP(w, r)
 				return
 			}

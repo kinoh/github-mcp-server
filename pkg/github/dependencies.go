@@ -389,10 +389,12 @@ func (d *RequestDeps) getOrCreateAppTransport(baseRESTURL string) (*ghinstallati
 	d.appTransportOnce.Do(func() {
 		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
 		if err != nil {
-			d.appTransportErr = fmt.Errorf("failed to initialize GitHub App transport")
+			d.appTransportErr = fmt.Errorf("failed to initialize GitHub App transport: %w", err)
 			return
 		}
 		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
+		// The HTTP server constructs APIHost once at startup, so app auth
+		// caches a single transport for that fixed REST API host.
 		itr.BaseURL = baseRESTURL
 		d.appTransport = itr
 	})

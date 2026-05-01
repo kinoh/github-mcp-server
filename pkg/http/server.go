@@ -119,7 +119,7 @@ func RunHTTPServer(cfg ServerConfig) error {
 		slogHandler = slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 	logger := slog.New(slogHandler)
-	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "lockdownEnabled", cfg.LockdownMode, "readOnly", cfg.ReadOnly, "insidersMode", cfg.InsidersMode)
+	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "lockdownEnabled", cfg.LockdownMode, "readOnly", cfg.ReadOnly, "insidersMode", cfg.InsidersMode, "appAuth", cfg.IsGitHubAppAuthEnabled())
 
 	apiHost, err := utils.NewAPIHost(cfg.Host)
 	if err != nil {
@@ -193,11 +193,15 @@ func RunHTTPServer(cfg ServerConfig) error {
 	})
 	logger.Info("MCP endpoints registered", "baseURL", cfg.BaseURL)
 
-	r.Group(func(r chi.Router) {
-		// Register OAuth protected resource metadata endpoints
-		oauthHandler.RegisterRoutes(r)
-	})
-	logger.Info("OAuth protected resource endpoints registered", "baseURL", cfg.BaseURL)
+	if cfg.IsGitHubAppAuthEnabled() {
+		logger.Info("OAuth protected resource endpoints skipped", "reason", "GitHub App auth mode enabled")
+	} else {
+		r.Group(func(r chi.Router) {
+			// Register OAuth protected resource metadata endpoints
+			oauthHandler.RegisterRoutes(r)
+		})
+		logger.Info("OAuth protected resource endpoints registered", "baseURL", cfg.BaseURL)
+	}
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	httpSvr := http.Server{
