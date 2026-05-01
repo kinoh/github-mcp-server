@@ -411,9 +411,6 @@ func (d *RequestDeps) getOrCreateAppTransport(baseRESTURL string) (*ghinstallati
 	if itr, ok := d.appTransports[baseRESTURL]; ok {
 		return itr, nil
 	}
-	if d.appTransports == nil {
-		d.appTransports = make(map[string]*ghinstallation.Transport)
-	}
 
 	tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
 	if err != nil {

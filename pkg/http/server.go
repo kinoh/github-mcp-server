@@ -176,10 +176,6 @@ func RunHTTPServer(cfg ServerConfig) error {
 
 	r := chi.NewRouter()
 	handler := NewHTTPMcpHandler(ctx, &cfg, deps, t, logger, apiHost, append(serverOptions, WithFeatureChecker(featureChecker), WithOAuthConfig(oauthCfg))...)
-	oauthHandler, err := oauth.NewAuthHandler(oauthCfg, apiHost)
-	if err != nil {
-		return fmt.Errorf("failed to create OAuth handler: %w", err)
-	}
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.SetCorsHeaders)
@@ -195,6 +191,10 @@ func RunHTTPServer(cfg ServerConfig) error {
 	if cfg.IsGitHubAppAuthEnabled() {
 		logger.Info("OAuth protected resource endpoints skipped", "reason", "GitHub App auth mode enabled")
 	} else {
+		oauthHandler, err := oauth.NewAuthHandler(oauthCfg, apiHost)
+		if err != nil {
+			return fmt.Errorf("failed to create OAuth handler: %w", err)
+		}
 		r.Group(func(r chi.Router) {
 			// Register OAuth protected resource metadata endpoints
 			oauthHandler.RegisterRoutes(r)

@@ -6,14 +6,18 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/github/github-mcp-server/pkg/observability"
+	"github.com/github/github-mcp-server/pkg/observability/metrics"
+	"github.com/github/github-mcp-server/pkg/translations"
+	"github.com/github/github-mcp-server/pkg/utils"
 )
 
 func TestRequestDepsRejectsPartialAppAuthConfig(t *testing.T) {
-	deps := &RequestDeps{
-		app: RequestDepsAppAuthConfig{AppID: 1},
-	}
+	deps := newTestRequestDeps(t, RequestDepsAppAuthConfig{AppID: 1})
 
 	_, err := deps.GetClient(context.Background())
 	if err == nil {
@@ -26,13 +30,11 @@ func TestRequestDepsRejectsPartialAppAuthConfig(t *testing.T) {
 }
 
 func TestRequestDepsGetOrCreateAppTransportWrapsInitializationError(t *testing.T) {
-	deps := &RequestDeps{
-		app: RequestDepsAppAuthConfig{
-			AppID:          1,
-			InstallationID: 2,
-			PrivateKeyPEM:  "not a pem",
-		},
-	}
+	deps := newTestRequestDeps(t, RequestDepsAppAuthConfig{
+		AppID:          1,
+		InstallationID: 2,
+		PrivateKeyPEM:  "not a pem",
+	})
 
 	_, err := deps.getOrCreateAppTransport("https://api.github.com/")
 	if err == nil {
@@ -47,13 +49,11 @@ func TestRequestDepsGetOrCreateAppTransportWrapsInitializationError(t *testing.T
 }
 
 func TestRequestDepsGetOrCreateAppTransportCachesByBaseRESTURL(t *testing.T) {
-	deps := &RequestDeps{
-		app: RequestDepsAppAuthConfig{
-			AppID:          1,
-			InstallationID: 2,
-			PrivateKeyPEM:  testRSAPrivateKeyPEM(t),
-		},
-	}
+	deps := newTestRequestDeps(t, RequestDepsAppAuthConfig{
+		AppID:          1,
+		InstallationID: 2,
+		PrivateKeyPEM:  testRSAPrivateKeyPEM(t),
+	})
 
 	first, err := deps.getOrCreateAppTransport("https://api.github.com/")
 	if err != nil {
@@ -81,6 +81,31 @@ func TestRequestDepsGetOrCreateAppTransportCachesByBaseRESTURL(t *testing.T) {
 	if third.BaseURL != "https://api.example.com/" {
 		t.Fatalf("expected separate base URL, got %q", third.BaseURL)
 	}
+}
+
+func newTestRequestDeps(t *testing.T, app RequestDepsAppAuthConfig) *RequestDeps {
+	t.Helper()
+
+	apiHost, err := utils.NewAPIHost("")
+	if err != nil {
+		t.Fatalf("failed to create API host: %v", err)
+	}
+	obs, err := observability.NewExporters(slog.New(slog.DiscardHandler), metrics.NewNoopMetrics())
+	if err != nil {
+		t.Fatalf("failed to create observability exporters: %v", err)
+	}
+
+	return NewRequestDeps(
+		apiHost,
+		"test",
+		false,
+		nil,
+		translations.NullTranslationHelper,
+		0,
+		nil,
+		obs,
+		app,
+	)
 }
 
 func testRSAPrivateKeyPEM(t *testing.T) string {
