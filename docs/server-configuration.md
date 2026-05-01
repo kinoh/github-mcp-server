@@ -241,6 +241,7 @@ Behavior in this mode:
 - Requests **must not** send an `Authorization` header.
 - `--scope-challenge` cannot be enabled together with GitHub App auth mode.
 - Effective permissions come from the GitHub App installation permissions.
+- The server uses `ghinstallation/v2` for GitHub App token exchange. Its transitive dependencies may overlap with versions used elsewhere in the server; this is accepted to avoid reimplementing GitHub App authentication logic.
 
 ---
 
