@@ -7,9 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 
-	ghcontext "github.com/github/github-mcp-server/pkg/context"
 	"github.com/bradleyfalzon/ghinstallation/v2"
+	ghcontext "github.com/github/github-mcp-server/pkg/context"
 	"github.com/github/github-mcp-server/pkg/http/transport"
 	"github.com/github/github-mcp-server/pkg/inventory"
 	"github.com/github/github-mcp-server/pkg/lockdown"
@@ -278,6 +279,10 @@ type RequestDeps struct {
 	// Observability exporters (includes logger)
 	obsv observability.Exporters
 	app  RequestDepsAppAuthConfig
+
+	appTransportOnce sync.Once
+	appTransportErr  error
+	appTransport     *ghinstallation.Transport
 }
 
 type RequestDepsAppAuthConfig struct {
@@ -325,12 +330,10 @@ func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
 
 	var restClient *gogithub.Client
 	if d.app.Enabled {
-		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
+		itr, err := d.getOrCreateAppTransport(baseRestURL.String())
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse GitHub App private key: %w", err)
+			return nil, err
 		}
-		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
-		itr.BaseURL = baseRestURL.String()
 		restClient = gogithub.NewClient(&http.Client{Transport: itr})
 	} else {
 		tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
@@ -349,16 +352,16 @@ func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
 func (d *RequestDeps) GetGQLClient(ctx context.Context) (*githubv4.Client, error) {
 	var gqlHTTPClient *http.Client
 	if d.app.Enabled {
-		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse GitHub App private key: %w", err)
-		}
-		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
 		baseRestURL, err := d.apiHosts.BaseRESTURL(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get base REST URL: %w", err)
 		}
-		itr.BaseURL = baseRestURL.String()
+		// BaseURL on ghinstallation transport is the REST API host used for
+		// installation token exchange (not the GraphQL endpoint).
+		itr, err := d.getOrCreateAppTransport(baseRestURL.String())
+		if err != nil {
+			return nil, err
+		}
 		gqlHTTPClient = &http.Client{Transport: &transport.GraphQLFeaturesTransport{Transport: itr}}
 	} else {
 		tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
@@ -380,6 +383,24 @@ func (d *RequestDeps) GetGQLClient(ctx context.Context) (*githubv4.Client, error
 
 	gqlClient := githubv4.NewEnterpriseClient(graphqlURL.String(), gqlHTTPClient)
 	return gqlClient, nil
+}
+
+func (d *RequestDeps) getOrCreateAppTransport(baseRESTURL string) (*ghinstallation.Transport, error) {
+	d.appTransportOnce.Do(func() {
+		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
+		if err != nil {
+			d.appTransportErr = fmt.Errorf("failed to initialize GitHub App transport")
+			return
+		}
+		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
+		itr.BaseURL = baseRESTURL
+		d.appTransport = itr
+	})
+
+	if d.appTransportErr != nil {
+		return nil, d.appTransportErr
+	}
+	return d.appTransport, nil
 }
 
 // GetRawClient implements ToolDependencies.
