@@ -126,12 +126,20 @@ func NewHTTPMcpHandler(
 }
 
 func (h *Handler) RegisterMiddleware(r chi.Router) {
-	r.Use(
-		middleware.ExtractUserToken(h.oauthCfg),
+	authMiddleware := middleware.ExtractUserToken(h.oauthCfg)
+	if h.config.IsGitHubAppAuthEnabled() {
+		authMiddleware = middleware.RejectAuthorizationHeader()
+	}
+
+	middlewares := []func(http.Handler) http.Handler{
+		authMiddleware,
 		middleware.WithRequestConfig,
 		middleware.WithMCPParse(),
-		middleware.WithPATScopes(h.logger, h.scopeFetcher),
-	)
+	}
+	if !h.config.IsGitHubAppAuthEnabled() {
+		middlewares = append(middlewares, middleware.WithPATScopes(h.logger, h.scopeFetcher))
+	}
+	r.Use(middlewares...)
 
 	if h.config.ScopeChallenge {
 		r.Use(middleware.WithScopeChallenge(h.oauthCfg, h.scopeFetcher))
