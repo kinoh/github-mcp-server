@@ -147,6 +147,9 @@ var (
 				DynamicToolsets:      viper.GetBool("dynamic_toolsets"),
 				ExcludeTools:         excludeTools,
 				InsidersMode:         viper.GetBool("insiders"),
+				GitHubAppID:          viper.GetInt64("app_id"),
+				GitHubAppInstallationID: viper.GetInt64("app_installation_id"),
+				GitHubAppPrivateKey:  viper.GetString("app_private_key"),
 			}
 
 			return ghhttp.RunHTTPServer(httpConfig)

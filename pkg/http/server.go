@@ -87,9 +87,18 @@ type ServerConfig struct {
 
 	// InsidersMode indicates if we should enable experimental features.
 	InsidersMode bool
+
+	// GitHub App authentication (HTTP mode only)
+	GitHubAppID             int64
+	GitHubAppInstallationID int64
+	GitHubAppPrivateKey     string
 }
 
 func RunHTTPServer(cfg ServerConfig) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+
 	// Create app context
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -140,6 +149,12 @@ func RunHTTPServer(cfg ServerConfig) error {
 		cfg.ContentWindowSize,
 		featureChecker,
 		obs,
+		github.RequestDepsAppAuthConfig{
+			Enabled:        cfg.IsGitHubAppAuthEnabled(),
+			AppID:          cfg.GitHubAppID,
+			InstallationID: cfg.GitHubAppInstallationID,
+			PrivateKeyPEM:  cfg.GitHubAppPrivateKey,
+		},
 	)
 
 	// Initialize the global tool scope map

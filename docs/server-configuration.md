@@ -226,6 +226,24 @@ Listed tools are removed regardless of any other configuration — even if their
 
 ---
 
+### HTTP: GitHub App Authentication Mode
+
+Use this mode when you want the server to authenticate as a single GitHub App installation for all requests.
+
+Set all of the following environment variables:
+
+- `GITHUB_APP_ID`
+- `GITHUB_APP_INSTALLATION_ID`
+- `GITHUB_APP_PRIVATE_KEY` (PEM private key content)
+
+Behavior in this mode:
+
+- Requests **must not** send an `Authorization` header.
+- `--scope-challenge` cannot be enabled together with GitHub App auth mode.
+- Effective permissions come from the GitHub App installation permissions.
+
+---
+
 ### Read-Only Mode
 
 **Best for:** Security conscious users who want to ensure the server won't allow operations that modify issues, pull requests, repositories etc.

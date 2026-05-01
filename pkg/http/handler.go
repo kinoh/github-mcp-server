@@ -126,8 +126,13 @@ func NewHTTPMcpHandler(
 }
 
 func (h *Handler) RegisterMiddleware(r chi.Router) {
+	authMiddleware := middleware.ExtractUserToken(h.oauthCfg)
+	if h.config.IsGitHubAppAuthEnabled() {
+		authMiddleware = middleware.RejectAuthorizationHeader()
+	}
+
 	r.Use(
-		middleware.ExtractUserToken(h.oauthCfg),
+		authMiddleware,
 		middleware.WithRequestConfig,
 		middleware.WithMCPParse(),
 		middleware.WithPATScopes(h.logger, h.scopeFetcher),

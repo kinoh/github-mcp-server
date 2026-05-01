@@ -9,6 +9,7 @@ import (
 	"os"
 
 	ghcontext "github.com/github/github-mcp-server/pkg/context"
+	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/github/github-mcp-server/pkg/http/transport"
 	"github.com/github/github-mcp-server/pkg/inventory"
 	"github.com/github/github-mcp-server/pkg/lockdown"
@@ -276,6 +277,14 @@ type RequestDeps struct {
 
 	// Observability exporters (includes logger)
 	obsv observability.Exporters
+	app  RequestDepsAppAuthConfig
+}
+
+type RequestDepsAppAuthConfig struct {
+	Enabled        bool
+	AppID          int64
+	InstallationID int64
+	PrivateKeyPEM  string
 }
 
 // NewRequestDeps creates a RequestDeps with the provided clients and configuration.
@@ -288,6 +297,7 @@ func NewRequestDeps(
 	contentWindowSize int,
 	featureChecker inventory.FeatureFlagChecker,
 	obsv observability.Exporters,
+	app RequestDepsAppAuthConfig,
 ) *RequestDeps {
 	return &RequestDeps{
 		apiHosts:          apiHosts,
@@ -298,18 +308,12 @@ func NewRequestDeps(
 		ContentWindowSize: contentWindowSize,
 		featureChecker:    featureChecker,
 		obsv:              obsv,
+		app:               app,
 	}
 }
 
 // GetClient implements ToolDependencies.
 func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
-	// extract the token from the context
-	tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
-	if !ok {
-		return nil, fmt.Errorf("no token info in context")
-	}
-	token := tokenInfo.Token
-
 	baseRestURL, err := d.apiHosts.BaseRESTURL(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get base REST URL: %w", err)
@@ -319,8 +323,22 @@ func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
 		return nil, fmt.Errorf("failed to get upload URL: %w", err)
 	}
 
-	// Construct REST client
-	restClient := gogithub.NewClient(nil).WithAuthToken(token)
+	var restClient *gogithub.Client
+	if d.app.Enabled {
+		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse GitHub App private key: %w", err)
+		}
+		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
+		itr.BaseURL = baseRestURL.String()
+		restClient = gogithub.NewClient(&http.Client{Transport: itr})
+	} else {
+		tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
+		if !ok {
+			return nil, fmt.Errorf("no token info in context")
+		}
+		restClient = gogithub.NewClient(nil).WithAuthToken(tokenInfo.Token)
+	}
 	restClient.UserAgent = fmt.Sprintf("github-mcp-server/%s", d.version)
 	restClient.BaseURL = baseRestURL
 	restClient.UploadURL = uploadURL
@@ -329,24 +347,30 @@ func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
 
 // GetGQLClient implements ToolDependencies.
 func (d *RequestDeps) GetGQLClient(ctx context.Context) (*githubv4.Client, error) {
-	// extract the token from the context
-	tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
-	if !ok {
-		return nil, fmt.Errorf("no token info in context")
-	}
-	token := tokenInfo.Token
-
-	// Construct GraphQL client
-	// We use NewEnterpriseClient unconditionally since we already parsed the API host
-	// Wrap transport with GraphQLFeaturesTransport to inject feature flags from context,
-	// matching the transport chain used by the remote server.
-	gqlHTTPClient := &http.Client{
-		Transport: &transport.BearerAuthTransport{
-			Transport: &transport.GraphQLFeaturesTransport{
-				Transport: http.DefaultTransport,
+	var gqlHTTPClient *http.Client
+	if d.app.Enabled {
+		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse GitHub App private key: %w", err)
+		}
+		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
+		baseRestURL, err := d.apiHosts.BaseRESTURL(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get base REST URL: %w", err)
+		}
+		itr.BaseURL = baseRestURL.String()
+		gqlHTTPClient = &http.Client{Transport: &transport.GraphQLFeaturesTransport{Transport: itr}}
+	} else {
+		tokenInfo, ok := ghcontext.GetTokenInfo(ctx)
+		if !ok {
+			return nil, fmt.Errorf("no token info in context")
+		}
+		gqlHTTPClient = &http.Client{
+			Transport: &transport.BearerAuthTransport{
+				Transport: &transport.GraphQLFeaturesTransport{Transport: http.DefaultTransport},
+				Token:     tokenInfo.Token,
 			},
-			Token: token,
-		},
+		}
 	}
 
 	graphqlURL, err := d.apiHosts.GraphqlURL(ctx)
