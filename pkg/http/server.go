@@ -150,7 +150,6 @@ func RunHTTPServer(cfg ServerConfig) error {
 		featureChecker,
 		obs,
 		github.RequestDepsAppAuthConfig{
-			Enabled:        cfg.IsGitHubAppAuthEnabled(),
 			AppID:          cfg.GitHubAppID,
 			InstallationID: cfg.GitHubAppInstallationID,
 			PrivateKeyPEM:  cfg.GitHubAppPrivateKey,

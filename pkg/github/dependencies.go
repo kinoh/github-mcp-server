@@ -280,16 +280,26 @@ type RequestDeps struct {
 	obsv observability.Exporters
 	app  RequestDepsAppAuthConfig
 
-	appTransportOnce sync.Once
-	appTransportErr  error
-	appTransport     *ghinstallation.Transport
+	appTransportMu sync.Mutex
+	appTransports  map[string]*ghinstallation.Transport
 }
 
 type RequestDepsAppAuthConfig struct {
-	Enabled        bool
 	AppID          int64
 	InstallationID int64
 	PrivateKeyPEM  string
+}
+
+func (cfg RequestDepsAppAuthConfig) IsEnabled() bool {
+	return cfg.AppID != 0 && cfg.InstallationID != 0 && cfg.PrivateKeyPEM != ""
+}
+
+func (cfg RequestDepsAppAuthConfig) Validate() error {
+	anySet := cfg.AppID != 0 || cfg.InstallationID != 0 || cfg.PrivateKeyPEM != ""
+	if anySet && !cfg.IsEnabled() {
+		return fmt.Errorf("only some GitHub App auth settings were set; AppID, InstallationID, and PrivateKeyPEM are all required")
+	}
+	return nil
 }
 
 // NewRequestDeps creates a RequestDeps with the provided clients and configuration.
@@ -314,11 +324,16 @@ func NewRequestDeps(
 		featureChecker:    featureChecker,
 		obsv:              obsv,
 		app:               app,
+		appTransports:     make(map[string]*ghinstallation.Transport),
 	}
 }
 
 // GetClient implements ToolDependencies.
 func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
+	if err := d.app.Validate(); err != nil {
+		return nil, err
+	}
+
 	baseRestURL, err := d.apiHosts.BaseRESTURL(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get base REST URL: %w", err)
@@ -329,7 +344,7 @@ func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
 	}
 
 	var restClient *gogithub.Client
-	if d.app.Enabled {
+	if d.app.IsEnabled() {
 		itr, err := d.getOrCreateAppTransport(baseRestURL.String())
 		if err != nil {
 			return nil, err
@@ -350,8 +365,12 @@ func (d *RequestDeps) GetClient(ctx context.Context) (*gogithub.Client, error) {
 
 // GetGQLClient implements ToolDependencies.
 func (d *RequestDeps) GetGQLClient(ctx context.Context) (*githubv4.Client, error) {
+	if err := d.app.Validate(); err != nil {
+		return nil, err
+	}
+
 	var gqlHTTPClient *http.Client
-	if d.app.Enabled {
+	if d.app.IsEnabled() {
 		baseRestURL, err := d.apiHosts.BaseRESTURL(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get base REST URL: %w", err)
@@ -386,23 +405,24 @@ func (d *RequestDeps) GetGQLClient(ctx context.Context) (*githubv4.Client, error
 }
 
 func (d *RequestDeps) getOrCreateAppTransport(baseRESTURL string) (*ghinstallation.Transport, error) {
-	d.appTransportOnce.Do(func() {
-		tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
-		if err != nil {
-			d.appTransportErr = fmt.Errorf("failed to initialize GitHub App transport: %w", err)
-			return
-		}
-		itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
-		// The HTTP server constructs APIHost once at startup, so app auth
-		// caches a single transport for that fixed REST API host.
-		itr.BaseURL = baseRESTURL
-		d.appTransport = itr
-	})
+	d.appTransportMu.Lock()
+	defer d.appTransportMu.Unlock()
 
-	if d.appTransportErr != nil {
-		return nil, d.appTransportErr
+	if itr, ok := d.appTransports[baseRESTURL]; ok {
+		return itr, nil
 	}
-	return d.appTransport, nil
+	if d.appTransports == nil {
+		d.appTransports = make(map[string]*ghinstallation.Transport)
+	}
+
+	tr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, d.app.AppID, []byte(d.app.PrivateKeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GitHub App transport: %w", err)
+	}
+	itr := ghinstallation.NewFromAppsTransport(tr, d.app.InstallationID)
+	itr.BaseURL = baseRESTURL
+	d.appTransports[baseRESTURL] = itr
+	return itr, nil
 }
 
 // GetRawClient implements ToolDependencies.

@@ -131,12 +131,15 @@ func (h *Handler) RegisterMiddleware(r chi.Router) {
 		authMiddleware = middleware.RejectAuthorizationHeader()
 	}
 
-	r.Use(
+	middlewares := []func(http.Handler) http.Handler{
 		authMiddleware,
 		middleware.WithRequestConfig,
 		middleware.WithMCPParse(),
-		middleware.WithPATScopes(h.logger, h.scopeFetcher),
-	)
+	}
+	if !h.config.IsGitHubAppAuthEnabled() {
+		middlewares = append(middlewares, middleware.WithPATScopes(h.logger, h.scopeFetcher))
+	}
+	r.Use(middlewares...)
 
 	if h.config.ScopeChallenge {
 		r.Use(middleware.WithScopeChallenge(h.oauthCfg, h.scopeFetcher))
