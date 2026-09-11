@@ -207,6 +207,43 @@ func Test_ActionsList_ListWorkflowRuns(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, *response.TotalCount)
 	})
+
+	t.Run("filters workflow runs by head_sha", func(t *testing.T) {
+		var capturedQuery string
+		mockedClient := MockHTTPClientWithHandlers(map[string]http.HandlerFunc{
+			GetReposActionsRunsByOwnerByRepo: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedQuery = r.URL.RawQuery
+				runs := &github.WorkflowRuns{
+					TotalCount:   github.Ptr(1),
+					WorkflowRuns: []*github.WorkflowRun{{ID: github.Ptr(int64(123))}},
+				}
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(runs)
+			}),
+		})
+
+		client := github.NewClient(mockedClient)
+		deps := BaseDeps{
+			Client: client,
+		}
+		handler := toolDef.Handler(deps)
+
+		request := createMCPRequest(map[string]any{
+			"method": "list_workflow_runs",
+			"owner":  "owner",
+			"repo":   "repo",
+			"workflow_runs_filter": map[string]any{
+				"branch":   "feature",
+				"head_sha": "deadbeef",
+			},
+		})
+		result, err := handler(ContextWithDeps(context.Background(), deps), &request)
+
+		require.NoError(t, err)
+		require.False(t, result.IsError)
+		assert.Contains(t, capturedQuery, "head_sha=deadbeef")
+		assert.Contains(t, capturedQuery, "branch=feature")
+	})
 }
 
 func Test_ActionsGet(t *testing.T) {

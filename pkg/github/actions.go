@@ -251,6 +251,10 @@ Use this tool to list workflows in a repository, or list workflow runs, jobs, an
 								Type:        "string",
 								Description: "Filter workflow runs to a specific Git branch. Use the name of the branch.",
 							},
+							"head_sha": {
+								Type:        "string",
+								Description: "Filter workflow runs to a specific commit SHA (the exact head commit that triggered the run).",
+							},
 							"event": {
 								Type:        "string",
 								Description: "Filter workflow runs to a specific event type",
@@ -822,10 +826,11 @@ func listWorkflowRuns(ctx context.Context, client *github.Client, args map[strin
 	}
 
 	listWorkflowRunsOptions := &github.ListWorkflowRunsOptions{
-		Actor:  filterArgsTyped["actor"],
-		Branch: filterArgsTyped["branch"],
-		Event:  filterArgsTyped["event"],
-		Status: filterArgsTyped["status"],
+		Actor:   filterArgsTyped["actor"],
+		Branch:  filterArgsTyped["branch"],
+		Event:   filterArgsTyped["event"],
+		Status:  filterArgsTyped["status"],
+		HeadSHA: filterArgsTyped["head_sha"],
 		ListOptions: github.ListOptions{
 			Page:    pagination.Page,
 			PerPage: pagination.PerPage,

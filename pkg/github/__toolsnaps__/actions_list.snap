@@ -102,6 +102,10 @@
             ],
             "type": "string"
           },
+          "head_sha": {
+            "description": "Filter workflow runs to a specific commit SHA (the exact head commit that triggered the run).",
+            "type": "string"
+          },
           "status": {
             "description": "Filter workflow runs to only runs with a specific status",
             "enum": [
