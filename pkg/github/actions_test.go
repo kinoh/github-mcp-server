@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/github/github-mcp-server/internal/toolsnaps"
@@ -698,4 +700,47 @@ func Test_ActionsGetJobLogs_FailedJobs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "No failed jobs found in this workflow run", response["message"])
 	})
+}
+
+func Test_ActionsGet_ExplicitAttemptAndListPagination(t *testing.T) {
+	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/owner/repo/actions/runs/123/attempts/2":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 123, "run_attempt": 2, "conclusion": "success"})
+		case "/repos/owner/repo/actions/runs":
+			assert.Equal(t, "2", r.URL.Query().Get("per_page"))
+			assert.Equal(t, "3", r.URL.Query().Get("page"))
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 0, "workflow_runs": []any{}})
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer fixture.Close()
+	client := github.NewClient(fixture.Client())
+	client.BaseURL, _ = url.Parse(fixture.URL + "/")
+	deps := BaseDeps{Client: client}
+	for _, args := range []map[string]any{
+		{"method": "get_workflow_run", "owner": "owner", "repo": "repo", "resource_id": "123", "attempt": float64(2)},
+		{"method": "list_workflow_runs", "owner": "owner", "repo": "repo", "page": float64(3), "per_page": float64(2)},
+	} {
+		tool := ActionsGet(translations.NullTranslationHelper)
+		if args["method"] == "list_workflow_runs" {
+			tool = ActionsList(translations.NullTranslationHelper)
+		}
+		request := createMCPRequest(args)
+		result, err := tool.Handler(deps)(ContextWithDeps(context.Background(), deps), &request)
+		require.NoError(t, err)
+		require.False(t, result.IsError)
+		if args["attempt"] != nil {
+			var run github.WorkflowRun
+			require.NoError(t, json.Unmarshal([]byte(getTextResult(t, result).Text), &run))
+			assert.Equal(t, 2, run.GetRunAttempt())
+		}
+	}
+	tool := ActionsGet(translations.NullTranslationHelper)
+	bad := createMCPRequest(map[string]any{"method": "get_workflow_run", "owner": "owner", "repo": "repo", "resource_id": "123", "attempt": float64(0)})
+	result, err := tool.Handler(deps)(ContextWithDeps(context.Background(), deps), &bad)
+	require.NoError(t, err)
+	require.True(t, result.IsError)
 }
