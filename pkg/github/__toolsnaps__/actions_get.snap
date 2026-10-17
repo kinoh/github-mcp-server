@@ -6,6 +6,10 @@
   "description": "Get details about specific GitHub Actions resources.\nUse this tool to get details about individual workflows, workflow runs, jobs, and artifacts by their unique IDs.\n",
   "inputSchema": {
     "properties": {
+      "attempt": {
+        "description": "Positive run attempt number (1 or greater), only used when method is get_workflow_run. Returns the specified attempt; when omitted, returns the latest attempt.",
+        "type": "integer"
+      },
       "method": {
         "description": "The method to execute",
         "enum": [

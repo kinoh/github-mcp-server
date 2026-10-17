@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -348,7 +349,11 @@ Use this tool to list workflows in a repository, or list workflow runs, jobs, an
 				return utils.NewToolResultError(err.Error()), nil, nil
 			}
 
-			pagination, err := OptionalPaginationParams(args)
+			paginationArgs := maps.Clone(args)
+			if value, ok := args["per_page"]; ok {
+				paginationArgs["perPage"] = value
+			}
+			pagination, err := OptionalPaginationParams(paginationArgs)
 			if err != nil {
 				return utils.NewToolResultError(err.Error()), nil, nil
 			}
@@ -431,6 +436,7 @@ Use this tool to get details about individual workflows, workflow runs, jobs, an
 						Type:        "string",
 						Description: "Repository name",
 					},
+					"attempt": {Type: "integer", Description: "Positive run attempt number (1 or greater), only used when method is get_workflow_run. Returns the specified attempt; when omitted, returns the latest attempt."},
 					"resource_id": {
 						Type: "string",
 						Description: `The unique identifier of the resource. This will vary based on the "method" provided, so ensure you provide the correct ID:
@@ -486,6 +492,22 @@ Use this tool to get details about individual workflows, workflow runs, jobs, an
 			case actionsMethodGetWorkflow:
 				return getWorkflow(ctx, client, owner, repo, resourceID)
 			case actionsMethodGetWorkflowRun:
+				attempt, err := OptionalIntParam(args, "attempt")
+				if err != nil || (args["attempt"] != nil && attempt < 1) {
+					return utils.NewToolResultError("attempt must be a positive integer"), nil, nil
+				}
+				if attempt > 0 {
+					run, response, err := client.Actions.GetWorkflowRunAttempt(ctx, owner, repo, resourceIDInt, attempt, nil)
+					if err != nil {
+						return ghErrors.NewGitHubAPIErrorResponse(ctx, "failed to get workflow run attempt", response, err), nil, nil
+					}
+					defer func() { _ = response.Body.Close() }()
+					data, err := json.Marshal(run)
+					if err != nil {
+						return nil, nil, err
+					}
+					return utils.NewToolResultText(string(data)), nil, nil
+				}
 				return getWorkflowRun(ctx, client, owner, repo, resourceIDInt)
 			case actionsMethodGetWorkflowJob:
 				return getWorkflowJob(ctx, client, owner, repo, resourceIDInt)

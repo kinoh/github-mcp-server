@@ -13,11 +13,14 @@ The following open source dependencies are used to build the [github/github-mcp-
 The following packages are included for the 386, amd64, arm64 architectures.
 
  - [github.com/aymerick/douceur](https://pkg.go.dev/github.com/aymerick/douceur) ([MIT](https://github.com/aymerick/douceur/blob/v0.2.0/LICENSE))
+ - [github.com/bradleyfalzon/ghinstallation/v2](https://pkg.go.dev/github.com/bradleyfalzon/ghinstallation/v2) ([Apache-2.0](https://github.com/bradleyfalzon/ghinstallation/blob/v2.18.0/LICENSE))
  - [github.com/fsnotify/fsnotify](https://pkg.go.dev/github.com/fsnotify/fsnotify) ([BSD-3-Clause](https://github.com/fsnotify/fsnotify/blob/v1.9.0/LICENSE))
  - [github.com/github/github-mcp-server](https://pkg.go.dev/github.com/github/github-mcp-server) ([MIT](https://github.com/github/github-mcp-server/blob/HEAD/LICENSE))
  - [github.com/go-chi/chi/v5](https://pkg.go.dev/github.com/go-chi/chi/v5) ([MIT](https://github.com/go-chi/chi/blob/v5.2.5/LICENSE))
  - [github.com/go-viper/mapstructure/v2](https://pkg.go.dev/github.com/go-viper/mapstructure/v2) ([MIT](https://github.com/go-viper/mapstructure/blob/v2.5.0/LICENSE))
+ - [github.com/golang-jwt/jwt/v4](https://pkg.go.dev/github.com/golang-jwt/jwt/v4) ([MIT](https://github.com/golang-jwt/jwt/blob/v4.5.2/LICENSE))
  - [github.com/google/go-github/v82/github](https://pkg.go.dev/github.com/google/go-github/v82/github) ([BSD-3-Clause](https://github.com/google/go-github/blob/v82.0.0/LICENSE))
+ - [github.com/google/go-github/v84/github](https://pkg.go.dev/github.com/google/go-github/v84/github) ([BSD-3-Clause](https://github.com/google/go-github/blob/v84.0.0/LICENSE))
  - [github.com/google/go-querystring/query](https://pkg.go.dev/github.com/google/go-querystring/query) ([BSD-3-Clause](https://github.com/google/go-querystring/blob/v1.2.0/LICENSE))
  - [github.com/google/jsonschema-go/jsonschema](https://pkg.go.dev/github.com/google/jsonschema-go/jsonschema) ([MIT](https://github.com/google/jsonschema-go/blob/v0.4.2/LICENSE))
  - [github.com/gorilla/css/scanner](https://pkg.go.dev/github.com/gorilla/css/scanner) ([BSD-3-Clause](https://github.com/gorilla/css/blob/v1.0.1/LICENSE))
