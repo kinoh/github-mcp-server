@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -348,10 +349,7 @@ Use this tool to list workflows in a repository, or list workflow runs, jobs, an
 				return utils.NewToolResultError(err.Error()), nil, nil
 			}
 
-			paginationArgs := make(map[string]any, len(args))
-			for key, value := range args {
-				paginationArgs[key] = value
-			}
+			paginationArgs := maps.Clone(args)
 			if value, ok := args["per_page"]; ok {
 				paginationArgs["perPage"] = value
 			}
