@@ -438,7 +438,7 @@ Use this tool to get details about individual workflows, workflow runs, jobs, an
 						Type:        "string",
 						Description: "Repository name",
 					},
-					"attempt": {Type: "integer", Description: "Optional run attempt, only for get_workflow_run."},
+					"attempt": {Type: "integer", Description: "Positive run attempt number (1 or greater), only used when method is get_workflow_run. Returns the specified attempt; when omitted, returns the latest attempt."},
 					"resource_id": {
 						Type: "string",
 						Description: `The unique identifier of the resource. This will vary based on the "method" provided, so ensure you provide the correct ID:

@@ -595,6 +595,7 @@ The following sets of tools are available:
 
 - **actions_get** - Get details of GitHub Actions resources (workflows, workflow runs, jobs, and artifacts)
   - **Required OAuth Scopes**: `repo`
+  - `attempt`: Positive run attempt number (1 or greater), only used when method is get_workflow_run. Returns the specified attempt; when omitted, returns the latest attempt. (integer, optional)
   - `method`: The method to execute (string, required)
   - `owner`: Repository owner (string, required)
   - `repo`: Repository name (string, required)

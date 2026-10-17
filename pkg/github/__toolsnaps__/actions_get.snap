@@ -7,7 +7,7 @@
   "inputSchema": {
     "properties": {
       "attempt": {
-        "description": "Optional run attempt, only for get_workflow_run.",
+        "description": "Positive run attempt number (1 or greater), only used when method is get_workflow_run. Returns the specified attempt; when omitted, returns the latest attempt.",
         "type": "integer"
       },
       "method": {
