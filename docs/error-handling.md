@@ -70,6 +70,37 @@ apiErrors, err := errors.GetGitHubAPIErrors(ctx)
 graphqlErrors, err := errors.GetGitHubGraphQLErrors(ctx)
 ```
 
+## Search Rate Limit Errors
+
+When `search_pull_requests` or `search_issues` encounters a GitHub API primary
+rate limit, it returns a failed tool result immediately after detecting the error.
+The tool does not wait for the quota to reset or automatically retry the request.
+For API responses, exhausted primary quota is identified by HTTP 403 or 429 with
+`x-ratelimit-remaining: 0`, as described in
+[GitHub's rate limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit).
+
+The result keeps its existing human-readable `content` and includes these fields:
+
+```json
+{
+  "isError": true,
+  "structuredContent": {
+    "error": {
+      "code": "primary_rate_limit_exceeded",
+      "reset_at": "2030-01-01T12:00:00Z"
+    }
+  }
+}
+```
+
+`reset_at` is the reset time reported by GitHub, formatted as a UTC RFC 3339
+timestamp. If the reset time is unavailable, the field is omitted rather than
+estimated. Clients decide whether and when to call the tool again, within their
+own execution deadlines and retry policies.
+
+Permission errors and secondary rate limits retain their existing error responses
+without this primary rate limit metadata. Successful search responses are unchanged.
+
 ## Design Principles
 
 ### User-Actionable vs. Developer Errors

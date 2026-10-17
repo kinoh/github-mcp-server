@@ -1067,6 +1067,7 @@ func Test_SearchPullRequests(t *testing.T) {
 			textContent := getTextResult(t, result)
 
 			// Unmarshal and verify the result
+			assert.Nil(t, result.StructuredContent, "successful search response must remain text-only")
 			var returnedResult github.IssuesSearchResult
 			err = json.Unmarshal([]byte(textContent.Text), &returnedResult)
 			require.NoError(t, err)

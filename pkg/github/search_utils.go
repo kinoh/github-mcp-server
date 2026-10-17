@@ -3,10 +3,12 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+	"time"
 
 	ghErrors "github.com/github/github-mcp-server/pkg/errors"
 	"github.com/github/github-mcp-server/pkg/utils"
@@ -94,12 +96,26 @@ func searchHandler(
 	if err != nil {
 		return utils.NewToolResultErrorFromErr(errorPrefix+": failed to get GitHub client", err), nil
 	}
-	// Search shares the installation's quota; wait for GitHub's reset and retry once.
-	// The incoming request context still bounds the wait and cancels the API call.
-	ctx = context.WithValue(ctx, github.SleepUntilPrimaryRateLimitResetWhenRateLimited, true)
 	result, resp, err := client.Search.Issues(ctx, query, opts)
 	if err != nil {
-		return utils.NewToolResultErrorFromErr(errorPrefix, err), nil
+		toolResult := utils.NewToolResultErrorFromErr(errorPrefix, err)
+		var rateLimitError *github.RateLimitError
+		var rate github.Rate
+		switch {
+		case errors.As(err, &rateLimitError):
+			rate = rateLimitError.Rate
+		case resp != nil && resp.StatusCode == http.StatusTooManyRequests && resp.Header.Get("X-RateLimit-Remaining") == "0":
+			// GitHub also reports exhausted primary quota with HTTP 429.
+			rate = resp.Rate
+		default:
+			return toolResult, nil
+		}
+		details := map[string]any{"code": "primary_rate_limit_exceeded"}
+		if !rate.Reset.Time.IsZero() {
+			details["reset_at"] = rate.Reset.Time.UTC().Format(time.RFC3339)
+		}
+		toolResult.StructuredContent = map[string]any{"error": details}
+		return toolResult, nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
