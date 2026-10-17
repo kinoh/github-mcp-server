@@ -1,10 +1,82 @@
 package github
 
 import (
+	"context"
+	"net/http"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/google/go-github/v82/github"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func Test_searchHandlerRateLimitRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		limited    bool
+		persistent bool
+		wantCalls  int
+		wantError  bool
+	}{
+		{name: "recover after primary reset", limited: true, wantCalls: 2},
+		{name: "persistent primary limit stops after one retry", limited: true, persistent: true, wantCalls: 2, wantError: true},
+		{name: "permission denial is not retried", wantCalls: 1, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reset := time.Now().Add(time.Second).Truncate(time.Second)
+			calls := 0
+			client := github.NewClient(MockHTTPClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				if calls == 1 || tc.persistent {
+					if tc.limited {
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
+						w.Header().Set("X-RateLimit-Resource", "search")
+					}
+					w.WriteHeader(http.StatusForbidden)
+					_, _ = w.Write([]byte(`{"message":"API request rejected"}`))
+					return
+				}
+				assert.False(t, time.Now().Before(reset), "request must wait until GitHub's reset")
+				_, _ = w.Write([]byte(`{"total_count":1,"incomplete_results":false,"items":[{"number":7}]}`))
+			}))
+			result, err := searchHandler(context.Background(), func(context.Context) (*github.Client, error) {
+				return client, nil
+			}, map[string]any{"query": "repo:owner/repo bug", "perPage": float64(100)}, "pr", "failed to search pull requests")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tc.wantError, result.IsError)
+			assert.Equal(t, tc.wantCalls, calls)
+			if !tc.wantError {
+				assert.Contains(t, getTextResult(t, result).Text, `"number":7`)
+			}
+		})
+	}
+}
+
+func Test_searchHandlerCancellationWhileRateLimited(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	client := github.NewClient(MockHTTPClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10))
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+		cancel()
+	}))
+	result, err := searchHandler(ctx, func(context.Context) (*github.Client, error) {
+		return client, nil
+	}, map[string]any{"query": "repo:owner/repo bug"}, "pr", "failed to search pull requests")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.IsError)
+	assert.Contains(t, getErrorResult(t, result).Text, context.Canceled.Error())
+	assert.Equal(t, 1, calls)
+}
 
 func Test_hasFilter(t *testing.T) {
 	tests := []struct {

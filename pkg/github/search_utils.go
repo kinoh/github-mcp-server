@@ -94,6 +94,9 @@ func searchHandler(
 	if err != nil {
 		return utils.NewToolResultErrorFromErr(errorPrefix+": failed to get GitHub client", err), nil
 	}
+	// Search shares the installation's quota; wait for GitHub's reset and retry once.
+	// The incoming request context still bounds the wait and cancels the API call.
+	ctx = context.WithValue(ctx, github.SleepUntilPrimaryRateLimitResetWhenRateLimited, true)
 	result, resp, err := client.Search.Issues(ctx, query, opts)
 	if err != nil {
 		return utils.NewToolResultErrorFromErr(errorPrefix, err), nil
